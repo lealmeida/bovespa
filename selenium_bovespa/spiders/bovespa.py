@@ -97,9 +97,9 @@ class BovespaSpider(scrapy.Spider):
             select = Select(driver.find_element_by_xpath('//*[@id="ctl00_contentPlaceHolderConteudo_cmbAno"]'))
             select.select_by_value(option)
             time.sleep(10)
-            self.dadosFinanceiro(driver, codigoCvm)
+            self.dadosFinanceiro(driver, codigoCvm, option)
 
-    def dadosFinanceiro(self, driver, codigoCvm):
+    def dadosFinanceiro(self, driver, codigoCvm, ano):
         driver.find_element_by_id("ctl00_contentPlaceHolderConteudo_rptDocumentosDFP_ctl00_lnkDocumento").click()
         time.sleep(15)
         window_before = driver.window_handles[0]
@@ -111,21 +111,20 @@ class BovespaSpider(scrapy.Spider):
             select = Select(driver.find_element_by_xpath('//*[@id="cmbQuadro"]'))
             select.select_by_index(index)
             time.sleep(10)
-            self.get_values(driver, codigoCvm)
+            self.get_values(driver, codigoCvm, ano)
         driver.close()
         driver.switch_to_window(window_before)
 
-    def get_values(self, driver, codigoCvm):
+    def get_values(self, driver, codigoCvm, ano):
         driver.switch_to.frame(driver.find_element_by_id('iFrameFormulariosFilho'))
         title = driver.find_element_by_xpath('//*[@id="TituloTabelaSemBorda"]').text.encode('utf8')
         client = MongoClient('localhost', 27017)
         for index, header in enumerate(driver.find_elements_by_xpath('//*[@id="ctl00_cphPopUp_tbDados"]/tbody/tr[1]/td')):
             if (index <= 1):
                 continue
-            loader = ItemLoader(
-                self.item[title.decode('utf8')], selector=header)
+            loader = ItemLoader(self.item[title.decode('utf8')], selector=header)
             loader.default_output_processor = TakeFirst()
-            loader.add_value('ano', '2018')
+            loader.add_value('ano', ano)
             loader.add_value('tipo', 'consolidado')
             loader.add_value('codigoCvm', codigoCvm)
             loader.add_value('periodo', header.text[-11:])
@@ -134,8 +133,7 @@ class BovespaSpider(scrapy.Spider):
             for rown in driver.find_elements_by_xpath('//*[@id="ctl00_cphPopUp_tbDados"]/tbody/tr')[1:]:
                 word = rown.find_element_by_xpath('./td[2]').text.strip().title().replace(' ', '')
                 loader.add_value(unidecode.unidecode(word[0].lower() + word[1:].replace(',', '').replace('.', '')), rown.find_element_by_xpath('./td[{}]'.format(index + 1)).text.strip())
-            collection = self.collection_name[type(
-                self.item[title.decode('utf8')]).__name__]
+            collection = self.collection_name[type(self.item[title.decode('utf8')]).__name__]
             self.persist(collection, loader.load_item(), client)
             del loader
         client.close
